@@ -2,7 +2,8 @@ import unittest
 
 from mdhandler import split_nodes_delimiter, \
     extract_markdown_images, extract_markdown_links, \
-        split_nodes_image, split_nodes_link, text_to_textnodes
+    split_nodes_image, split_nodes_link, text_to_textnodes, \
+    markdown_to_blocks, block_to_block_type, BlockType
 from textnode import TextNode, TextType
 
 class TestMdHandler(unittest.TestCase):
@@ -201,6 +202,191 @@ class TestMdHandler(unittest.TestCase):
         text = "Text ending with [a link](https://example.com)"
         nodes = text_to_textnodes(text)
         self.assertEqual(nodes[-1].text_type, TextType.LINK)
+    
+    def test_markdown_to_blocks(self):
+        md = """This is **bolded** paragraph
+
+This is another paragraph with _italic_ text and `code` here
+This is the same paragraph on a new line
+
+- This is a list
+- with items
+"""
+        blocks = markdown_to_blocks(md)
+        self.assertEqual(
+            blocks,
+            [
+                "This is **bolded** paragraph",
+                "This is another paragraph with _italic_ text and `code` here\nThis is the same paragraph on a new line",
+                "- This is a list\n- with items",
+            ],
+        )
+
+    def test_markdown_to_blocks_with_no_newline(self):
+        md = """
+This is **bolded** paragraph
+This is another paragraph with _italic_ text and `code` here
+This is the same paragraph on a new line
+- This is a list
+- with items
+"""
+        blocks = markdown_to_blocks(md)
+        self.assertEqual(
+            blocks,
+            [
+                "This is **bolded** paragraph\nThis is another paragraph with _italic_ text and `code` here\nThis is the same paragraph on a new line\n- This is a list\n- with items",
+            ],
+        )
+
+    def test_markdown_to_blocks_with_multiple_newlines(self):
+        md = """This is **bolded** paragraph
+
+
+
+
+This is another paragraph with _italic_ text and `code` here
+This is the same paragraph on a new line
+
+
+
+
+- This is a list
+- with items
+"""
+        blocks = markdown_to_blocks(md)
+        self.assertEqual(
+            blocks,
+            [
+                "This is **bolded** paragraph",
+                "This is another paragraph with _italic_ text and `code` here\nThis is the same paragraph on a new line",
+                "- This is a list\n- with items",
+            ],
+        )
+
+    def test_block_to_BlockType_heading_1(self):
+        block = "# Heading 1"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.HEADING_1
+        )
+
+    def test_block_to_BlockType_heading_2(self):
+        block = "## Heading 2"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.HEADING_2
+        )
+
+    def test_block_to_BlockType_heading_3(self):
+        block = "### Heading 3"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.HEADING_3
+        )
+
+    def test_block_to_BlockType_heading_4(self):
+        block = "#### Heading 4"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.HEADING_4
+        )
+
+    def test_block_to_BlockType_heading_5(self):
+        block = "##### Heading 5"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.HEADING_5
+        )
+
+    def test_block_to_BlockType_heading_6(self):
+        block = "###### Heading 6"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.HEADING_6
+        )
+
+    def test_block_to_BlockType_code(self):
+        block = "```This is some cool code```"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.CODE
+        )
+
+    def test_block_to_BlockType_code_multiline(self):
+        block = """```This is some cool code
+there is no spoon
+x = 2```"""
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.CODE
+        )
+
+    def test_block_to_BlockType_quote(self):
+        block = ">To err is human"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.QUOTE
+        )
+
+    def test_block_to_BlockType_quote_multiline(self):
+        block = """>There once was a man from Nantucket,
+>Who kept all his cash in a bucket.
+>His daughter, named Nan,
+>Ran away with a man,
+>And as for the bucket, Nantucket."""
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.QUOTE
+        )
+
+    def test_block_to_BlockType_unordered_list(self):
+        block = "- book"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.UNORDERED_LIST
+        )
+
+    def test_block_to_BlockType_unordered_list_multiple_items(self):
+        block = """- book
+- hat
+- umbrella
+- good-for-nothing shoes"""
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.UNORDERED_LIST
+        )
+
+    def test_block_to_BlockType_ordered_list(self):
+        block = "1. look up"
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.ORDERED_LIST
+        )
+
+    def test_block_to_BlockType_ordered_list_multiple_items(self):
+        block = """1. look up
+2. look down
+3. look all around"""
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.ORDERED_LIST
+        )
+
+    def test_block_to_BlockType_paragraph(self):
+        block = "This is a single line paragraph."
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.PARAGRAPH
+        )
+
+    def test_block_to_BlockType_paragraph_multiple_lines(self):
+        block = """This is a multi line paragraph. There are many sentences and newlines.
+A new line here, but in the same paragraph.
+Another new line, but still in the same paragraph."""
+        self.assertEqual(
+            block_to_block_type(block),
+            BlockType.PARAGRAPH
+        )
 
 if __name__ == "__main__":
     unittest.main()

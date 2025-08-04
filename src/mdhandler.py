@@ -1,5 +1,20 @@
 import re
+from enum import Enum
 from textnode import TextNode, TextType
+
+class BlockType(Enum):
+    PARAGRAPH = 'p'
+    HEADING_1 = 'h1'
+    HEADING_2 = 'h2'
+    HEADING_3 = 'h3'
+    HEADING_4 = 'h4'
+    HEADING_5 = 'h5'
+    HEADING_6 = 'h6'
+    CODE = 'code'
+    QUOTE = 'blockquote'
+    UNORDERED_LIST = 'ul'
+    ORDERED_LIST = 'ol'
+
 
 
 def split_nodes_delimiter(old_nodes, delimiter, text_type):
@@ -80,3 +95,47 @@ def text_to_textnodes(text):
     nodes = split_nodes_link(nodes)
     return nodes
     
+def markdown_to_blocks(markdown):
+    blocks = []
+    for block in markdown.split('\n\n'):
+        if not block:
+            continue
+        blocks.append(block.strip())
+    
+    return blocks
+
+def block_to_block_type(block):
+    lines = block.split("\n")
+    if re.match(r'^#{1}\s', block):
+        return BlockType.HEADING_1
+    if re.match(r'^#{2}\s', block):
+        return BlockType.HEADING_2
+    if re.match(r'^#{3}\s', block):
+        return BlockType.HEADING_3
+    if re.match(r'^#{4}\s', block):
+        return BlockType.HEADING_4
+    if re.match(r'^#{5}\s', block):
+        return BlockType.HEADING_5
+    if re.match(r'^#{6}\s', block):
+        return BlockType.HEADING_6
+    if re.match(r'\A`{3}', block) and re.search(r'`{3}\Z', block):
+        return BlockType.CODE
+    if re.match(r'^>\S', block):
+        for line in lines:
+            if not line.startswith(">"):
+                return BlockType.PARAGRAPH
+        return BlockType.QUOTE
+    if re.match(r'^-\s', block):
+        for line in lines:
+            if not line.startswith("- "):
+                return BlockType.PARAGRAPH
+        return BlockType.UNORDERED_LIST
+    if re.match(r'^1\.\s', block):
+        i = 1
+        for line in lines:
+            if not line.startswith(f"{i}. "):
+                return BlockType.PARAGRAPH
+            i += 1
+        return BlockType.ORDERED_LIST
+    
+    return BlockType.PARAGRAPH
