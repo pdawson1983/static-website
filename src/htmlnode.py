@@ -19,9 +19,9 @@ class HTMLNode:
         return f'HTMLNode({self.tag}, {self.value}, {self.children}, {self.props})'
 
 class LeafNode(HTMLNode):
-    def __init__(self, tag, value=None, children=None, props=None):
+    def __init__(self, tag=None, value=None, children=None, props=None):
         super().__init__(tag, value, None, props)
-        if self.value == None:
+        if self.value == None and self.tag != 'img':
             raise(ValueError)
 
     def to_html(self):

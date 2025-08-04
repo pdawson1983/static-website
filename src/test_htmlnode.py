@@ -45,10 +45,21 @@ class TestHTMLNode(unittest.TestCase):
             leaf.to_html(),
             '<b>This is leaf</b>'
         )
+    
+    def test_render_leaf_node_with_no_tag(self):
+        leaf = LeafNode(value="This is leaf with no tag")
+        self.assertEqual(
+            leaf.to_html(),
+            'This is leaf with no tag'
+        )
 
-    def test_value_error(self):
+    def test_value_error_of_bold_leafnode(self):
         with self.assertRaises(ValueError):
             leaf = LeafNode(tag='b')
+    
+    def test_no_value_error_of_img_leafnode(self):
+        leaf = LeafNode(tag='img', props={'src': 'static/image.jpg', 'alt': 'This is an image node'})
+        self.assertIsNotNone(leaf)
     
     def test_leaf_node_with_props(self):
         leaf = LeafNode(tag='a', value="This is leaf", props={'href':'https://www.google.com','target':'_blank' })
@@ -64,6 +75,25 @@ class TestHTMLNode(unittest.TestCase):
             parent_node.to_html(),
             "<div><b>Child</b></div>"
         )
+    
+    def test_to_html_with_multiple_simple_leaf_children(self):
+        child1_node = LeafNode('b', "Child1")
+        child2_node = LeafNode(None, "Child2")
+        parent_node = ParentNode("div", children=[child1_node,child2_node])
+        self.assertEqual(
+            parent_node.to_html(),
+            "<div><b>Child1</b>Child2</div>"
+        )
+
+    def test_to_html_with_multiple_complex_leaf_children(self):
+        child1_node = LeafNode('a', "Child1", props={'href':'https://www.google.com','target':'_blank' } )
+        child2_node = LeafNode('a', "Child2", props={'href':'https://www.google.com','target':'_blank' })
+        parent_node = ParentNode("div", children=[child1_node,child2_node])
+        self.assertEqual(
+            parent_node.to_html(),
+            '<div><a href="https://www.google.com" target="_blank">Child1</a><a href="https://www.google.com" target="_blank">Child2</a></div>'
+        )
+    
 
     def test_to_html_with_grandchildren(self):
         grandchild_node = LeafNode("b", "grandchild")
