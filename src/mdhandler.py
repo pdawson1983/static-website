@@ -105,6 +105,7 @@ def markdown_to_blocks(markdown):
     return blocks
 
 def block_to_block_type(block):
+    lines = block.split("\n")
     if re.match(r'^#{1}\s', block):
         return BlockType.HEADING_1
     if re.match(r'^#{2}\s', block):
@@ -120,10 +121,21 @@ def block_to_block_type(block):
     if re.match(r'\A`{3}', block) and re.search(r'`{3}\Z', block):
         return BlockType.CODE
     if re.match(r'^>\S', block):
+        for line in lines:
+            if not line.startswith(">"):
+                return BlockType.PARAGRAPH
         return BlockType.QUOTE
     if re.match(r'^-\s', block):
+        for line in lines:
+            if not line.startswith("- "):
+                return BlockType.PARAGRAPH
         return BlockType.UNORDERED_LIST
     if re.match(r'^1\.\s', block):
+        i = 1
+        for line in lines:
+            if not line.startswith(f"{i}. "):
+                return BlockType.PARAGRAPH
+            i += 1
         return BlockType.ORDERED_LIST
     
     return BlockType.PARAGRAPH
