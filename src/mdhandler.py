@@ -80,3 +80,6 @@ def text_to_textnodes(text):
     nodes = split_nodes_link(nodes)
     return nodes
     
+def markdown_to_blocks(markdown):
+    pass
+    # TODO Create markdown_to_blocks function

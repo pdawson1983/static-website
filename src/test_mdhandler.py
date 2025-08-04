@@ -201,6 +201,10 @@ class TestMdHandler(unittest.TestCase):
         text = "Text ending with [a link](https://example.com)"
         nodes = text_to_textnodes(text)
         self.assertEqual(nodes[-1].text_type, TextType.LINK)
+    
+    def test_markdown_to_blocks(self):
+        pass
+        # TODO Create markdown_to_blocks tests
 
 if __name__ == "__main__":
     unittest.main()
