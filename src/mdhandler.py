@@ -41,7 +41,7 @@ def split_nodes_image(old_nodes):
         parts = re.split(r'(\!\[.+?\]\(.+?\))', node.text)
         for part in parts:
             if not part:
-                break
+                continue
             if part.startswith('!['):
                 text, url = matches.pop(0)
                 new_nodes.append(TextNode(str(text),TextType.IMAGE, str(url)))
@@ -61,7 +61,7 @@ def split_nodes_link(old_nodes):
         parts = re.split(r'(\[.+?\]\(.+?\))', node.text)
         for part in parts:
             if not part:
-                break
+                continue
             if part.startswith('['):
                 text, url = matches.pop(0)
                 new_nodes.append(TextNode(str(text),TextType.LINK, str(url)))

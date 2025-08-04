@@ -159,6 +159,48 @@ class TestMdHandler(unittest.TestCase):
                 TextNode("link", TextType.LINK, "https://boot.dev"),
             ]
         )
+    
+    def test_text_to_textnodes_empty_string(self):
+        nodes = text_to_textnodes("")
+        self.assertEqual(nodes, [])
+    
+    def test_text_to_textnodes_whitespace_only(self):
+        nodes = text_to_textnodes("   ")
+        self.assertEqual(nodes, [TextNode("   ", TextType.TEXT)])
+
+    def test_text_to_textnodes_adjacent_formatting(self):
+        text = "**bold**_italic_`code`"
+        nodes = text_to_textnodes(text)
+        self.assertEqual(nodes, [
+            TextNode("bold", TextType.BOLD),
+            TextNode("italic", TextType.ITALIC),
+            TextNode("code", TextType.CODE)
+        ])
+
+    def test_text_to_textnodes_unclosed_bold(self):
+        text = "This has **unclosed bold text"
+        with self.assertRaises(ValueError):
+            text_to_textnodes(text)
+
+    def test_text_to_textnodes_unclosed_italic(self):
+        text = "This has _unclosed italic text"
+        with self.assertRaises(ValueError):
+            text_to_textnodes(text)
+
+    def test_text_to_textnodes_unclosed_code(self):
+        text = "This has `unclosed code text"
+        with self.assertRaises(ValueError):
+            text_to_textnodes(text)
+
+    def test_text_to_textnodes_image_at_start(self):
+        text = "![start image](https://example.com) followed by text"
+        nodes = text_to_textnodes(text)
+        self.assertEqual(nodes[0].text_type, TextType.IMAGE)
+
+    def test_text_to_textnodes_link_at_end(self):
+        text = "Text ending with [a link](https://example.com)"
+        nodes = text_to_textnodes(text)
+        self.assertEqual(nodes[-1].text_type, TextType.LINK)
 
 if __name__ == "__main__":
     unittest.main()
