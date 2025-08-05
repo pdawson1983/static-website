@@ -1,4 +1,4 @@
-import os, shutil
+import shutil, sys
 from pathlib import Path
 from mdhandler import generate_page
 
@@ -54,7 +54,7 @@ def setup_public_directory(source_dir, dest_dir='public', clean=False):
     
     return files_copied, directories_created
 
-def generate_pages_recursive(content_dir, template_path, dest_dir):
+def generate_pages_recursive(content_dir, template_path, dest_dir, basepath):
     content_path = Path(content_dir)
     dest_path = Path(dest_dir)
     
@@ -68,7 +68,7 @@ def generate_pages_recursive(content_dir, template_path, dest_dir):
         if item.is_dir():
             # Recursive case: process subdirectory
             sub_dest = dest_path / item.name
-            generate_pages_recursive(item, template_path, sub_dest)
+            generate_pages_recursive(item, template_path, sub_dest, basepath)
             
         elif item.suffix == '.md':
             # Base case: convert .md file to .html
@@ -80,11 +80,16 @@ def generate_pages_recursive(content_dir, template_path, dest_dir):
                 html_file = dest_path / f"{item.stem}.html"
             
             print(f"Generating: {item} -> {html_file}")
-            generate_page(str(item), template_path, str(html_file))
+            generate_page(str(item), template_path, str(html_file), basepath)
 
 def main():
     setup_public_directory('static','public', True)
-    generate_pages_recursive('content', 'template.html', 'public')
+    generate_pages_recursive('content', 'template.html', 'docs', basepath)
 
 if __name__ == '__main__':
+    args = sys.argv
+    if not args[1:]:
+        basepath = '/'
+    else:
+        basepath = args[1]
     main()
