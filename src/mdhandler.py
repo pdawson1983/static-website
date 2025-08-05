@@ -86,6 +86,20 @@ def split_nodes_link(old_nodes):
 
     return new_nodes
 
+# def split_nodes_break(old_nodes):
+#     new_nodes = []
+#     for node in old_nodes:
+#         if node.text_type != TextType.TEXT:
+#             new_nodes.append(node)
+#             continue
+        
+#         lines = re.split(r'\n', node.text)
+#         if len(lines) > 1:
+#             for line in lines[:-1]:
+
+
+#     return new_nodes
+
 def text_to_textnodes(text):
     nodes = [TextNode(text, TextType.TEXT)]
     nodes = split_nodes_image(nodes)
@@ -94,6 +108,7 @@ def text_to_textnodes(text):
     nodes = split_nodes_delimiter(nodes, '*', TextType.ITALIC)
     nodes = split_nodes_delimiter(nodes, '_', TextType.ITALIC)
     nodes = split_nodes_delimiter(nodes, '`', TextType.CODE)
+    # nodes = split_nodes_break(nodes)
     return nodes
     
 def markdown_to_blocks(markdown):
@@ -107,6 +122,7 @@ def markdown_to_blocks(markdown):
 
 def block_to_block_type(block):
     lines = block.split("\n")
+    #breakpoint()
     if re.match(r'^#{1}\s', block):
         return BlockType.HEADING_1
     if re.match(r'^#{2}\s', block):
@@ -121,7 +137,7 @@ def block_to_block_type(block):
         return BlockType.HEADING_6
     if re.match(r'\A`{3}', block) and re.search(r'`{3}\Z', block):
         return BlockType.CODE
-    if re.match(r'^>\S', block):
+    if re.match(r'^>', block):
         for line in lines:
             if not line.startswith(">"):
                 return BlockType.PARAGRAPH
@@ -148,11 +164,31 @@ def code_block_to_html_node(block):
     return ParentNode('pre',[text_node_to_html_node(code_node)])
 
 def quote_block_to_html_node(block):
-    code_content = re.sub(r'(^|\n)>', r'\1',block)
-    quote_textnodes = text_to_textnodes(code_content)
+    # Split into lines and process each line
+    lines = block.split('\n')
     html_nodes = []
-    for node in quote_textnodes:
-        html_nodes.append(text_node_to_html_node(node))
+    
+    for i, line in enumerate(lines):
+        # Remove > and any immediately following space, but preserve content
+        cleaned_line = re.sub(r'^>\s?', '', line)
+        
+        # Skip completely empty lines (after removing >)
+        if not cleaned_line.strip():
+            continue
+            
+        # Process line for inline markdown
+        text_nodes = text_to_textnodes(cleaned_line)
+        for node in text_nodes:
+            html_nodes.append(text_node_to_html_node(node))
+        
+        # Add <br> between non-empty lines (but not after the last line)
+        if i < len(lines) - 1:
+            # Check if there are more non-empty lines coming
+            remaining_lines = lines[i+1:]
+            has_more_content = any(re.sub(r'^>\s?', '', l).strip() for l in remaining_lines)
+            if has_more_content:
+                html_nodes.append(LeafNode('br'))
+    
     return ParentNode(BlockType.QUOTE.value, html_nodes)
 
 def paragraph_to_html_node(block):
@@ -166,7 +202,7 @@ def paragraph_to_html_node(block):
                 html_nodes.append(text_node_to_html_node(node))
         
 
-        if i < len(lines) - 1:
+        if i < len(lines) - 1 and line.strip():
             html_nodes.append(LeafNode('br'))  
     
     return ParentNode(BlockType.PARAGRAPH.value, html_nodes)
@@ -175,14 +211,30 @@ def unordered_list_to_html_node(block):
     lines = re.findall(r'^- (.+)$', block, re.MULTILINE)
     html_nodes = []
     for line in lines:
-        html_nodes.append(LeafNode('li', line))
+        # Process each list item for inline markdown formatting
+        text_nodes = text_to_textnodes(line)
+        li_children = []
+        for node in text_nodes:
+            li_children.append(text_node_to_html_node(node))
+        
+        # Create the <li> as a ParentNode to hold the processed content
+        html_nodes.append(ParentNode('li', li_children))
+    
     return ParentNode(BlockType.UNORDERED_LIST.value, html_nodes)
 
 def ordered_list_to_html_node(block):
     lines = re.findall(r'^\d\. (.+)$', block, re.MULTILINE)
     html_nodes = []
     for line in lines:
-        html_nodes.append(LeafNode('li', line))
+        # Process each list item for inline markdown formatting
+        text_nodes = text_to_textnodes(line)
+        li_children = []
+        for node in text_nodes:
+            li_children.append(text_node_to_html_node(node))
+        
+        # Create the <li> as a ParentNode to hold the processed content
+        html_nodes.append(ParentNode('li', li_children))
+    
     return ParentNode(BlockType.ORDERED_LIST.value, html_nodes)
 
 def headings_to_html_node(block):
@@ -232,6 +284,7 @@ def markdown_to_html_node(markdown):
                 for node in text_nodes:
                     html_nodes.append(text_node_to_html_node(node))
                 child_nodes.append(ParentNode(block_type.value, html_nodes))
+        
 
     return ParentNode('div', child_nodes)
     

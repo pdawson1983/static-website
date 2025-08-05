@@ -25,8 +25,10 @@ class LeafNode(HTMLNode):
             raise(ValueError)
 
     def to_html(self):
-        if self.tag in ['img', 'br']:  # Self-closing tags
+        if self.tag == 'img':  # Only img is self-closing
             return f'<{self.tag}{" " + self.props_to_html() if self.props else ""} />'
+        elif self.tag == 'br':  # br tags without self-closing syntax
+            return '<br>'
         elif self.tag:
             return f'<{self.tag}{" " + self.props_to_html() if self.props else ""}>{self.value}</{self.tag}>'
         return self.value

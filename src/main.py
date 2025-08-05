@@ -54,9 +54,37 @@ def setup_public_directory(source_dir, dest_dir='public', clean=False):
     
     return files_copied, directories_created
 
+def generate_pages_recursive(content_dir, template_path, dest_dir):
+    content_path = Path(content_dir)
+    dest_path = Path(dest_dir)
+    
+    if not content_path.exists():
+        raise FileNotFoundError(f"Content directory '{content_path}' does not exist")
+    
+    # Create destination directory if it doesn't exist
+    dest_path.mkdir(parents=True, exist_ok=True)
+    
+    for item in content_path.iterdir():
+        if item.is_dir():
+            # Recursive case: process subdirectory
+            sub_dest = dest_path / item.name
+            generate_pages_recursive(item, template_path, sub_dest)
+            
+        elif item.suffix == '.md':
+            # Base case: convert .md file to .html
+            if item.name == 'index.md':
+                # index.md becomes index.html
+                html_file = dest_path / 'index.html'
+            else:
+                # other.md becomes other.html
+                html_file = dest_path / f"{item.stem}.html"
+            
+            print(f"Generating: {item} -> {html_file}")
+            generate_page(str(item), template_path, str(html_file))
+
 def main():
     setup_public_directory('static','public', True)
-    generate_page('content/index.md', 'template.html', 'public/index.html')
+    generate_pages_recursive('content', 'template.html', 'public')
 
 if __name__ == '__main__':
     main()

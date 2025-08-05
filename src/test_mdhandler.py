@@ -399,7 +399,7 @@ This is another paragraph with _italic_ text and `code` here
         html = node.to_html()
         self.assertEqual(
             html,
-            "<div><p>This is <b>bolded</b> paragraph<br />text in a p<br />tag here</p><p>This is another paragraph with <i>italic</i> text and <code>code</code> here</p></div>",
+            "<div><p>This is <b>bolded</b> paragraph<br>text in a p<br>tag here</p><p>This is another paragraph with <i>italic</i> text and <code>code</code> here</p></div>",
         )
 
     def test_codeblock_to_html_node(self):
@@ -428,7 +428,7 @@ the **same** even with inline stuff
         html = node.to_html()
         self.assertEqual(
             html,
-            "<div><blockquote>I've learned that people will forget what you said\npeople will forget what you did\nbut people will never forget how you made them feel.</blockquote></div>",
+            "<div><blockquote>I've learned that people will forget what you said<br>people will forget what you did<br>but people will never forget how you made them feel.</blockquote></div>",
         )
 
     def test_unordered_list_to_html_node(self):
