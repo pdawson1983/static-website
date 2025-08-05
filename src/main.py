@@ -1,5 +1,6 @@
 import os, shutil
 from pathlib import Path
+from mdhandler import generate_page
 
 def setup_public_directory(source_dir, dest_dir='public', clean=False):
     src = Path(source_dir)
@@ -55,6 +56,7 @@ def setup_public_directory(source_dir, dest_dir='public', clean=False):
 
 def main():
     setup_public_directory('static','public', True)
+    generate_page('content/index.md', 'template.html', 'public/index.html')
 
 if __name__ == '__main__':
     main()

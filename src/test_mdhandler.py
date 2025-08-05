@@ -1,9 +1,6 @@
 import unittest
 
-from mdhandler import split_nodes_delimiter, \
-    extract_markdown_images, extract_markdown_links, \
-    split_nodes_image, split_nodes_link, text_to_textnodes, \
-    markdown_to_blocks, block_to_block_type, BlockType, markdown_to_html_node
+from mdhandler import *
 from textnode import TextNode, TextType
 
 class TestMdHandler(unittest.TestCase):
@@ -492,6 +489,25 @@ the **same** even with inline stuff
             html,
             '<div><h1><a href="https://www.youtube.com/watch?v=Mapn4dhcFlc&ab_channel=Colleyville">Turn on water</a></h1></div>'
         )
+    
+    def test_extract_title_basic_title(self):
+        md = """
+# Basic Title
+"""
+
+        title = extract_title(md)
+        self.assertEqual(
+            title,
+            'Basic Title'
+        )
+    
+    def test_extract_title_no_title(self):
+        md = """
+Basic Title
+"""
+        with self.assertRaises(Exception):
+            title = extract_title(md)
+        
 
 if __name__ == "__main__":
     unittest.main()

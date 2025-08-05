@@ -235,8 +235,35 @@ def markdown_to_html_node(markdown):
 
     return ParentNode('div', child_nodes)
     
-        
+def extract_title(markdown):
+    blocks = markdown_to_blocks(markdown)
+    title = ''
+    for block in blocks:
+        if re.match(r'^(#+)\s(.+)$', block):
+            title = block.replace("#", '').strip()
+            break
+    if title:
+        return title
+    else:
+        raise Exception('no title in markdown or title in incorrect format')
+
+def read_file(path):
+    with open(path, 'r') as file:
+        return file.read()
     
+def generate_page(from_path, template_path, dest_path):
+    print(f'Generating page from {from_path} to {dest_path} using {template_path}')
+    markdown = read_file(from_path)
+    template = read_file(template_path)
+    html_node = markdown_to_html_node(markdown)
+    html_string = html_node.to_html()
+    html = template.replace('{{ Title }}', extract_title(markdown))
+    html = html.replace('{{ Content }}', html_string)
+    with open(dest_path, 'w') as html_file:
+        html_file.write(html)
+    
+    
+        
             
             
 
