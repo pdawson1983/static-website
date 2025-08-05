@@ -29,7 +29,7 @@ class TestHTMLNode(unittest.TestCase):
         leaf = LeafNode(tag='b', value="This is leaf")
         self.assertEqual(
             repr(leaf),
-            "HTMLNode(b, This is leaf, None, None)"
+            "LeafNode(b, This is leaf, None)"
         )
     
     def test_leaf_to_html_p(self):

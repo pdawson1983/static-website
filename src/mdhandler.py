@@ -1,6 +1,6 @@
 import re
 from enum import Enum
-from textnode import TextNode, TextType
+from textnode import TextNode, TextType, text_node_to_html_node
 from htmlnode import HTMLNode, LeafNode, ParentNode
 
 class BlockType(Enum):
@@ -88,12 +88,12 @@ def split_nodes_link(old_nodes):
 
 def text_to_textnodes(text):
     nodes = [TextNode(text, TextType.TEXT)]
+    nodes = split_nodes_image(nodes)
+    nodes = split_nodes_link(nodes)
     nodes = split_nodes_delimiter(nodes, '**', TextType.BOLD)
     nodes = split_nodes_delimiter(nodes, '*', TextType.ITALIC)
     nodes = split_nodes_delimiter(nodes, '_', TextType.ITALIC)
     nodes = split_nodes_delimiter(nodes, '`', TextType.CODE)
-    nodes = split_nodes_image(nodes)
-    nodes = split_nodes_link(nodes)
     return nodes
     
 def markdown_to_blocks(markdown):
@@ -102,7 +102,7 @@ def markdown_to_blocks(markdown):
         if not block:
             continue
         blocks.append(block.strip())
-    
+    #breakpoint()
     return blocks
 
 def block_to_block_type(block):
@@ -141,8 +141,105 @@ def block_to_block_type(block):
     
     return BlockType.PARAGRAPH
 
+def code_block_to_html_node(block):
+    code_content = re.sub(r'^```.*?\n', '', block)  
+    code_content = re.sub(r'(\n)```$', r'\1', code_content)  
+    code_node = TextNode(code_content, TextType.CODE)
+    return ParentNode('pre',[text_node_to_html_node(code_node)])
+
+def quote_block_to_html_node(block):
+    code_content = re.sub(r'(^|\n)>', r'\1',block)
+    quote_textnodes = text_to_textnodes(code_content)
+    html_nodes = []
+    for node in quote_textnodes:
+        html_nodes.append(text_node_to_html_node(node))
+    return ParentNode(BlockType.QUOTE.value, html_nodes)
+
+def paragraph_to_html_node(block):
+    lines = block.split('\n')
+    html_nodes = []
+    
+    for i, line in enumerate(lines):
+        if line.strip():  
+            text_nodes = text_to_textnodes(line)
+            for node in text_nodes:
+                html_nodes.append(text_node_to_html_node(node))
+        
+
+        if i < len(lines) - 1:
+            html_nodes.append(LeafNode('br'))  
+    
+    return ParentNode(BlockType.PARAGRAPH.value, html_nodes)
+
+def unordered_list_to_html_node(block):
+    lines = re.findall(r'^- (.+)$', block, re.MULTILINE)
+    html_nodes = []
+    for line in lines:
+        html_nodes.append(LeafNode('li', line))
+    return ParentNode(BlockType.UNORDERED_LIST.value, html_nodes)
+
+def ordered_list_to_html_node(block):
+    lines = re.findall(r'^\d\. (.+)$', block, re.MULTILINE)
+    html_nodes = []
+    for line in lines:
+        html_nodes.append(LeafNode('li', line))
+    return ParentNode(BlockType.ORDERED_LIST.value, html_nodes)
+
+def headings_to_html_node(block):
+    lines = re.findall(r'^(#+)\s(.+)$', block, re.MULTILINE)
+    html_nodes = []
+    for h, value in lines:
+        text_nodes = text_to_textnodes(value)
+        sub_nodes = []
+        for node in text_nodes:
+            sub_nodes.append(text_node_to_html_node(node))
+        if len(sub_nodes) > 1:
+            html_nodes.append(ParentNode(f'h{len(h)}', sub_nodes))
+        elif len(sub_nodes) == 1 and text_nodes[0].text_type != 'TEXT':
+            html_nodes.append(ParentNode(f'h{len(h)}', sub_nodes))
+        else:
+            html_nodes.append(LeafNode(f'h{len(h)}', value))
+    
+    return html_nodes
+        
+
+
 
 def markdown_to_html_node(markdown):
+    HEADING_TYPES = {BlockType.HEADING_1, BlockType.HEADING_2, BlockType.HEADING_3, 
+                 BlockType.HEADING_4, BlockType.HEADING_5, BlockType.HEADING_6}
     blocks = markdown_to_blocks(markdown)
+    child_nodes=[]
     for block in blocks:
         block_type = block_to_block_type(block)
+        if block_type == BlockType.CODE:
+            node = code_block_to_html_node(block)
+            child_nodes.append(node)
+        elif block_type == BlockType.QUOTE:
+            child_nodes.append(quote_block_to_html_node(block))
+        elif block_type == BlockType.UNORDERED_LIST:
+            child_nodes.append(unordered_list_to_html_node(block))
+        elif block_type == BlockType.ORDERED_LIST:
+            child_nodes.append(ordered_list_to_html_node(block))
+        elif block_type in HEADING_TYPES:
+            child_nodes.extend(headings_to_html_node(block))
+        else:
+            if block_type == BlockType.PARAGRAPH:
+                child_nodes.append(paragraph_to_html_node(block))
+            else:
+                text_nodes = text_to_textnodes(block)
+                html_nodes = []
+                for node in text_nodes:
+                    html_nodes.append(text_node_to_html_node(node))
+                child_nodes.append(ParentNode(block_type.value, html_nodes))
+
+    return ParentNode('div', child_nodes)
+    
+        
+    
+            
+            
+
+
+
+        

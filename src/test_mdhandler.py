@@ -388,7 +388,7 @@ Another new line, but still in the same paragraph."""
             BlockType.PARAGRAPH
         )
 
-    def test_paragraphs(self):
+    def test_paragraphs_to_html_node(self):
         md = """
 This is **bolded** paragraph
 text in a p
@@ -402,10 +402,10 @@ This is another paragraph with _italic_ text and `code` here
         html = node.to_html()
         self.assertEqual(
             html,
-            "<div><p>This is <b>bolded</b> paragraph text in a p tag here</p><p>This is another paragraph with <i>italic</i> text and <code>code</code> here</p></div>",
+            "<div><p>This is <b>bolded</b> paragraph<br />text in a p<br />tag here</p><p>This is another paragraph with <i>italic</i> text and <code>code</code> here</p></div>",
         )
 
-    def test_codeblock(self):
+    def test_codeblock_to_html_node(self):
         md = """
 ```
 This is text that _should_ remain
@@ -418,6 +418,79 @@ the **same** even with inline stuff
         self.assertEqual(
             html,
             "<div><pre><code>This is text that _should_ remain\nthe **same** even with inline stuff\n</code></pre></div>",
+        )
+
+    def test_quote_block_to_html_node(self):
+        md = """
+>I've learned that people will forget what you said
+>people will forget what you did
+>but people will never forget how you made them feel.
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><blockquote>I've learned that people will forget what you said\npeople will forget what you did\nbut people will never forget how you made them feel.</blockquote></div>",
+        )
+
+    def test_unordered_list_to_html_node(self):
+        md = """
+- Ball
+- Bat
+- Sandlot
+- Babe Ruth
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><ul><li>Ball</li><li>Bat</li><li>Sandlot</li><li>Babe Ruth</li></ul></div>",
+        )
+
+    def test_ordered_list_to_html_node(self):
+        md = """
+1. Turn on water
+2. Add soap
+3. Lather in water
+4. Rinse
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><ol><li>Turn on water</li><li>Add soap</li><li>Lather in water</li><li>Rinse</li></ol></div>",
+        )
+
+    def test_headings_to_html_node(self):
+        md = """
+# Turn on water
+## Add soap
+### Lather in _water_
+#### Rinse
+##### dry hands
+###### **smile**
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            "<div><h1>Turn on water</h1><h2>Add soap</h2><h3>Lather in <i>water</i></h3><h4>Rinse</h4><h5>dry hands</h5><h6><b>smile</b></h6></div>",
+        )
+
+    def test_link_headings_to_html_node(self):
+        md = """
+# [Turn on water](https://www.youtube.com/watch?v=Mapn4dhcFlc&ab_channel=Colleyville)
+"""
+
+        node = markdown_to_html_node(md)
+        html = node.to_html()
+        self.assertEqual(
+            html,
+            '<div><h1><a href="https://www.youtube.com/watch?v=Mapn4dhcFlc&ab_channel=Colleyville">Turn on water</a></h1></div>'
         )
 
 if __name__ == "__main__":
