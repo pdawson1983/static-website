@@ -269,7 +269,7 @@ pipeline {
                         
                         # Start container in test mode on default network
                         TEST_CONTAINER="${CONTAINER_NAME}-test"
-                        docker run -d --name ${TEST_CONTAINER} ${IMAGE_TAG}
+                        docker run -d --name ${TEST_CONTAINER} --network=my-network ${IMAGE_TAG}
                         
                         # Wait for container to be ready
                         echo "⏳ Waiting for container to start..."
