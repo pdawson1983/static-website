@@ -1,0 +1,492 @@
+pipeline {
+    agent any
+    
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'staging', 'prod'],
+            description: 'Target deployment environment'
+        )
+        choice(
+            name: 'ACTION',
+            choices: ['deploy', 'stop', 'restart', 'logs'],
+            description: 'Container action to perform'
+        )
+        string(
+            name: 'PORT',
+            defaultValue: '8080',
+            description: 'Port to expose the container on (default: 8080)'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip running tests'
+        )
+        booleanParam(
+            name: 'FORCE_REBUILD',
+            defaultValue: false,
+            description: 'Force rebuild of Docker image (ignore cache)'
+        )
+    }
+    
+    environment {
+        // Container and image names
+        IMAGE_NAME = "static-website"
+        CONTAINER_NAME = "${IMAGE_NAME}-${params.ENVIRONMENT}"
+        IMAGE_TAG = "${IMAGE_NAME}:${params.ENVIRONMENT}-${BUILD_NUMBER}"
+        IMAGE_LATEST = "${IMAGE_NAME}:${params.ENVIRONMENT}-latest"
+        
+        // Network for container communication
+        DOCKER_NETWORK = "jenkins-network"
+        
+        // Deployment settings
+        DEPLOY_PORT = "${params.PORT}"
+        
+        // Docker socket access (Jenkins running in Docker needs this)
+        DOCKER_HOST = "unix:///var/run/docker.sock"
+    }
+    
+    triggers {
+        // Poll SCM every 5 minutes for changes
+        pollSCM('H/5 * * * *')
+        
+        // GitHub webhook trigger (configure in GitHub repo settings)
+        githubPush()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                // Clean workspace and checkout code
+                deleteDir()
+                checkout scm
+                
+                script {
+                    echo "🚀 Starting deployment for environment: ${params.ENVIRONMENT}"
+                    echo "📦 Container name: ${CONTAINER_NAME}"
+                    echo "🖼️  Image tag: ${IMAGE_TAG}"
+                    echo "🔌 Port: ${DEPLOY_PORT}"
+                    echo "⚡ Action: ${params.ACTION}"
+                }
+            }
+        }
+        
+        stage('Pre-flight Checks') {
+            steps {
+                script {
+                    // Check if Docker is available
+                    sh '''
+                        if ! command -v docker &> /dev/null; then
+                            echo "❌ Docker is not installed or not accessible"
+                            exit 1
+                        fi
+                        
+                        echo "✅ Docker version:"
+                        docker --version
+                        
+                        echo "✅ Docker info:"
+                        docker info --format "{{.ServerVersion}}"
+                    '''
+                    
+                    // Create Docker network if it doesn't exist
+                    sh '''
+                        if ! docker network ls | grep -q "${DOCKER_NETWORK}"; then
+                            echo "📡 Creating Docker network: ${DOCKER_NETWORK}"
+                            docker network create ${DOCKER_NETWORK} || echo "Network may already exist"
+                        else
+                            echo "✅ Docker network ${DOCKER_NETWORK} already exists"
+                        fi
+                    '''
+                    
+                    // Check if port is available (if deploying)
+                    if (params.ACTION == 'deploy') {
+                        sh '''
+                            if netstat -tuln | grep ":${DEPLOY_PORT} "; then
+                                echo "⚠️  Port ${DEPLOY_PORT} is already in use"
+                                echo "📋 Processes using port ${DEPLOY_PORT}:"
+                                ss -tulnp | grep ":${DEPLOY_PORT} " || lsof -i :${DEPLOY_PORT} || echo "Could not determine process"
+                            else
+                                echo "✅ Port ${DEPLOY_PORT} is available"
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Validate Python Code') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'deploy' }
+                    expression { params.ACTION == 'restart' }
+                }
+                not { params.SKIP_TESTS }
+            }
+            steps {
+                script {
+                    // Check Python syntax
+                    sh '''
+                        echo "🐍 Validating Python code..."
+                        
+                        # Find all Python files and check syntax
+                        find . -name "*.py" -type f | while read -r file; do
+                            echo "Checking syntax: $file"
+                            python3 -m py_compile "$file" || exit 1
+                        done
+                        
+                        echo "✅ Python syntax validation passed"
+                    '''
+                    
+                    // Check for requirements.txt and validate
+                    sh '''
+                        if [ -f requirements.txt ]; then
+                            echo "📋 Found requirements.txt, validating..."
+                            pip3 install --dry-run -r requirements.txt > /dev/null || echo "⚠️  Some requirements may not be installable"
+                        else
+                            echo "ℹ️  No requirements.txt found"
+                        fi
+                    '''
+                }
+            }
+        }
+        
+        stage('Stop Existing Container') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'deploy' }
+                    expression { params.ACTION == 'stop' }
+                    expression { params.ACTION == 'restart' }
+                }
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "🛑 Stopping existing container if running..."
+                        
+                        if docker ps -q -f name=${CONTAINER_NAME}; then
+                            echo "📦 Found running container: ${CONTAINER_NAME}"
+                            docker stop ${CONTAINER_NAME} || true
+                            docker rm ${CONTAINER_NAME} || true
+                            echo "✅ Container ${CONTAINER_NAME} stopped and removed"
+                        else
+                            echo "ℹ️  No running container found with name: ${CONTAINER_NAME}"
+                        fi
+                        
+                        # Clean up any orphaned containers
+                        docker container prune -f || true
+                    '''
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'deploy' }
+                    expression { params.ACTION == 'restart' }
+                }
+            }
+            steps {
+                script {
+                    // Build Docker image
+                    def buildArgs = params.FORCE_REBUILD ? '--no-cache' : ''
+                    
+                    sh """
+                        echo "🔨 Building Docker image..."
+                        echo "📁 Build context: \$(pwd)"
+                        echo "🏗️  Build args: ${buildArgs}"
+                        
+                        # Build the image
+                        docker build ${buildArgs} -t ${IMAGE_TAG} -t ${IMAGE_LATEST} .
+                        
+                        echo "✅ Docker image built successfully"
+                        docker images | grep ${IMAGE_NAME} | head -5
+                    """
+                }
+            }
+        }
+        
+        stage('Test Docker Image') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'deploy' }
+                    expression { params.ACTION == 'restart' }
+                }
+                not { params.SKIP_TESTS }
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "🧪 Testing Docker image..."
+                        
+                        # Start container in test mode
+                        TEST_CONTAINER="${CONTAINER_NAME}-test"
+                        docker run -d --name ${TEST_CONTAINER} -p 0:80 ${IMAGE_TAG}
+                        
+                        # Wait for container to be ready
+                        echo "⏳ Waiting for container to start..."
+                        sleep 5
+                        
+                        # Get the assigned port
+                        TEST_PORT=$(docker port ${TEST_CONTAINER} 80 | cut -d: -f2)
+                        echo "🔍 Testing on port: ${TEST_PORT}"
+                        
+                        # Test if the site is accessible
+                        for i in {1..10}; do
+                            if curl -f --max-time 5 "http://localhost:${TEST_PORT}/" > /dev/null 2>&1; then
+                                echo "✅ Website is accessible!"
+                                break
+                            elif [ $i -eq 10 ]; then
+                                echo "❌ Website test failed after 10 attempts"
+                                docker logs ${TEST_CONTAINER}
+                                exit 1
+                            else
+                                echo "⏳ Attempt $i/10 failed, retrying..."
+                                sleep 2
+                            fi
+                        done
+                        
+                        # Check response content
+                        RESPONSE=$(curl -s "http://localhost:${TEST_PORT}/")
+                        echo "📄 Response preview:"
+                        echo "${RESPONSE}" | head -3
+                        
+                        # Cleanup test container
+                        docker stop ${TEST_CONTAINER} || true
+                        docker rm ${TEST_CONTAINER} || true
+                        
+                        echo "✅ Docker image test passed"
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy Container') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'deploy' }
+                    expression { params.ACTION == 'restart' }
+                }
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "🚀 Deploying container..."
+                        
+                        # Run the new container
+                        docker run -d \\
+                            --name ${CONTAINER_NAME} \\
+                            --network ${DOCKER_NETWORK} \\
+                            --restart unless-stopped \\
+                            -p ${DEPLOY_PORT}:80 \\
+                            -l "app=static-website" \\
+                            -l "environment=${ENVIRONMENT}" \\
+                            -l "version=${BUILD_NUMBER}" \\
+                            -l "jenkins-job=${JOB_NAME}" \\
+                            ${IMAGE_TAG}
+                        
+                        echo "✅ Container ${CONTAINER_NAME} started successfully"
+                        
+                        # Wait for container to be ready
+                        echo "⏳ Waiting for container to be ready..."
+                        sleep 3
+                        
+                        # Show container info
+                        docker ps --filter "name=${CONTAINER_NAME}" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"
+                    '''
+                }
+            }
+        }
+        
+        stage('Health Check') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'deploy' }
+                    expression { params.ACTION == 'restart' }
+                }
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "🏥 Performing health check..."
+                        
+                        # Wait for service to be fully ready
+                        for i in {1..15}; do
+                            if curl -f --max-time 5 "http://localhost:${DEPLOY_PORT}/" > /dev/null 2>&1; then
+                                echo "✅ Health check passed on attempt $i"
+                                break
+                            elif [ $i -eq 15 ]; then
+                                echo "❌ Health check failed after 15 attempts"
+                                echo "📋 Container logs:"
+                                docker logs ${CONTAINER_NAME} --tail 20
+                                exit 1
+                            else
+                                echo "⏳ Health check attempt $i/15 failed, retrying..."
+                                sleep 2
+                            fi
+                        done
+                        
+                        # Test website response
+                        echo "📄 Website response test:"
+                        RESPONSE=$(curl -s "http://localhost:${DEPLOY_PORT}/")
+                        if echo "${RESPONSE}" | grep -q "html\\|HTML"; then
+                            echo "✅ Valid HTML response detected"
+                        else
+                            echo "⚠️  Response may not be valid HTML"
+                        fi
+                        
+                        echo "🌐 Website is accessible at: http://localhost:${DEPLOY_PORT}"
+                    '''
+                }
+            }
+        }
+        
+        stage('Show Logs') {
+            when {
+                expression { params.ACTION == 'logs' }
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "📋 Container logs for: ${CONTAINER_NAME}"
+                        
+                        if docker ps -q -f name=${CONTAINER_NAME}; then
+                            echo "=== RECENT LOGS ==="
+                            docker logs ${CONTAINER_NAME} --tail 50 --timestamps
+                            
+                            echo "\\n=== CONTAINER STATUS ==="
+                            docker ps --filter "name=${CONTAINER_NAME}" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"
+                            
+                            echo "\\n=== CONTAINER STATS ==="
+                            docker stats ${CONTAINER_NAME} --no-stream --format "table {{.Container}}\\t{{.CPUPerc}}\\t{{.MemUsage}}"
+                        else
+                            echo "❌ Container ${CONTAINER_NAME} is not running"
+                            echo "Available containers:"
+                            docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"
+                        fi
+                    '''
+                }
+            }
+        }
+        
+        stage('Cleanup Old Images') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'deploy' }
+                    expression { params.ACTION == 'restart' }
+                }
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "🧹 Cleaning up old images..."
+                        
+                        # Keep the last 3 images for this environment
+                        docker images ${IMAGE_NAME} --format "{{.Tag}} {{.ID}}" | \\
+                        grep "${ENVIRONMENT}-[0-9]" | \\
+                        sort -V -r | \\
+                        tail -n +4 | \\
+                        awk '{print $2}' | \\
+                        xargs -r docker rmi || echo "No old images to remove"
+                        
+                        # Cleanup dangling images
+                        docker image prune -f || true
+                        
+                        echo "✅ Image cleanup completed"
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                // Show deployment summary
+                def summary = """
+                🎯 **Deployment Summary**
+                
+                **Environment:** ${params.ENVIRONMENT}
+                **Action:** ${params.ACTION}
+                **Build:** #${BUILD_NUMBER}
+                **Container:** ${CONTAINER_NAME}
+                **Image:** ${IMAGE_TAG}
+                """
+                
+                if (params.ACTION in ['deploy', 'restart']) {
+                    summary += """
+                **URL:** http://localhost:${DEPLOY_PORT}
+                **Port:** ${DEPLOY_PORT}
+                """
+                }
+                
+                echo summary
+            }
+            
+            // Archive build artifacts
+            archiveArtifacts artifacts: 'Dockerfile', fingerprint: true, allowEmptyArchive: true
+            
+            // Clean workspace
+            cleanWs(deleteDirs: true, disableDeferredWipeout: true)
+        }
+        
+        success {
+            script {
+                echo "🎉 Pipeline completed successfully!"
+                
+                if (params.ACTION in ['deploy', 'restart']) {
+                    echo """
+                    ✅ Your static website is now running!
+                    🌐 Access it at: http://localhost:${DEPLOY_PORT}
+                    📦 Container: ${CONTAINER_NAME}
+                    🏷️  Image: ${IMAGE_TAG}
+                    
+                    📋 Useful Docker commands:
+                    docker logs ${CONTAINER_NAME}           # View logs
+                    docker stop ${CONTAINER_NAME}           # Stop container
+                    docker start ${CONTAINER_NAME}          # Start container
+                    docker exec -it ${CONTAINER_NAME} sh    # Shell access
+                    """
+                }
+                
+                // Store deployment info for other jobs
+                writeFile file: 'deployment-info.json', text: """
+                {
+                    "environment": "${params.ENVIRONMENT}",
+                    "container_name": "${CONTAINER_NAME}",
+                    "image_tag": "${IMAGE_TAG}",
+                    "port": "${DEPLOY_PORT}",
+                    "build_number": "${BUILD_NUMBER}",
+                    "timestamp": "${new Date().format('yyyy-MM-dd HH:mm:ss')}",
+                    "url": "http://localhost:${DEPLOY_PORT}"
+                }
+                """
+                archiveArtifacts artifacts: 'deployment-info.json', fingerprint: true
+            }
+        }
+        
+        failure {
+            script {
+                echo "❌ Pipeline failed!"
+                
+                // Show container logs if they exist
+                sh '''
+                    if docker ps -a -q -f name=${CONTAINER_NAME}; then
+                        echo "📋 Container logs:"
+                        docker logs ${CONTAINER_NAME} --tail 20 || true
+                    fi
+                    
+                    echo "🔍 Available containers:"
+                    docker ps -a --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}" || true
+                    
+                    echo "🖼️  Available images:"
+                    docker images ${IMAGE_NAME} || true
+                '''
+            }
+        }
+        
+        unstable {
+            echo "⚠️ Pipeline completed with warnings"
+        }
+    }
+}

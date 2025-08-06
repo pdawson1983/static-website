@@ -316,12 +316,3 @@ def generate_page(from_path, template_path, dest_path, basepath='/'):
     html = html.replace('src="/', f'src="{basepath}' )
     with open(dest_path, 'w') as html_file:
         html_file.write(html)
-    
-    
-        
-            
-            
-
-
-
-        
