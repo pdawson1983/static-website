@@ -47,8 +47,8 @@ pipeline {
         // Deployment settings
         DEPLOY_PORT = "${params.PORT}"
         
-        // Docker socket access (Jenkins running in Docker needs this)
-        DOCKER_HOST = "unix:///var/run/docker.sock"
+        // Docker socket access (Windows Docker Desktop)
+        DOCKER_HOST = "tcp://host.docker.internal:2375"
     }
     
     triggers {
@@ -89,12 +89,41 @@ pipeline {
                         error("❌ Docker is not installed or not accessible")
                     }
                     
+                    echo "✅ Docker binary found"
+                    
+                    // Test Docker daemon access
+                    def dockerAccessCheck = sh(
+                        script: 'docker info --format "{{.ServerVersion}}"',
+                        returnStatus: true
+                    )
+                    
+                    if (dockerAccessCheck != 0) {
+                        sh '''
+                            echo "⚠️  Docker daemon access issue detected"
+                            echo "🔧 Attempting to fix permissions..."
+                            
+                            # Try to fix permissions (may not work in all environments)
+                            ls -la /var/run/docker.sock || echo "Cannot list docker socket"
+                            
+                            echo "📋 Current user and groups:"
+                            whoami
+                            groups
+                            
+                            echo "❌ Docker daemon is not accessible"
+                            echo "💡 Solution: Run these commands on the host:"
+                            echo "   docker exec -u root jenkins usermod -aG docker jenkins"
+                            echo "   sudo chmod 666 /var/run/docker.sock"
+                            echo "   docker restart jenkins"
+                        '''
+                        error("Docker daemon permission denied")
+                    }
+                    
                     sh '''
                         echo "✅ Docker version:"
                         docker --version
                         
-                        echo "✅ Docker info:"
-                        docker info --format "{{.ServerVersion}}"
+                        echo "✅ Docker daemon accessible"
+                        echo "Server version: $(docker info --format '{{.ServerVersion}}')"
                     '''
                     
                     // Create Docker network if it doesn't exist
