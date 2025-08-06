@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'docker:latest'
+            args '-v /var/run/docker.sock:/var/run/docker.sock --privileged'
+        }
+    }
     
     parameters {
         choice(
@@ -75,12 +80,16 @@ pipeline {
             steps {
                 script {
                     // Check if Docker is available
+                    def dockerCheck = sh(
+                        script: 'command -v docker',
+                        returnStatus: true
+                    )
+                    
+                    if (dockerCheck != 0) {
+                        error("❌ Docker is not installed or not accessible")
+                    }
+                    
                     sh '''
-                        if ! command -v docker &> /dev/null; then
-                            echo "❌ Docker is not installed or not accessible"
-                            exit 1
-                        fi
-                        
                         echo "✅ Docker version:"
                         docker --version
                         
