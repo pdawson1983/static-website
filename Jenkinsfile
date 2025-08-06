@@ -212,11 +212,11 @@ pipeline {
                 script {
                     sh '''
                         echo "🛑 Stopping existing container if running..."
-                        CONTAINER_ID=`docker ps -q -f name=${CONTAINER_NAME}`
+                        
                         if docker ps -q -f name=${CONTAINER_NAME}; then
                             echo "📦 Found running container: ${CONTAINER_NAME}"
-                            docker stop $CONTAINER_ID || true
-                            docker rm $CONTAINER_ID || true
+                            docker stop ${CONTAINER_NAME} || true
+                            docker rm ${CONTAINER_NAME} || true
                             echo "✅ Container ${CONTAINER_NAME} stopped and removed"
                         else
                             echo "ℹ️  No running container found with name: ${CONTAINER_NAME}"
@@ -271,22 +271,21 @@ pipeline {
                     sh '''
                         echo "🧪 Testing Docker image..."
                         
-                        # Start container in test mode
+                        # Start container in test mode with same network as Jenkins
                         TEST_CONTAINER="${CONTAINER_NAME}-test"
-                        docker run -d --name ${TEST_CONTAINER} -p 0:80 ${IMAGE_TAG}
+                        docker run -d --name ${TEST_CONTAINER} --network ${DOCKER_NETWORK} ${IMAGE_TAG}
                         
                         # Wait for container to be ready
                         echo "⏳ Waiting for container to start..."
                         sleep 5
                         
-                        # Get the assigned port
-                        TEST_PORT=$(docker port ${TEST_CONTAINER} 80 | cut -d: -f2)
-                        echo "🔍 Testing on port: ${TEST_PORT}"
+                        # Test if the site is accessible using container name
+                        echo "🔍 Testing container directly: ${TEST_CONTAINER}"
                         
                         # Test if the site is accessible
                         SUCCESS=false
                         for i in 1 2 3 4 5 6 7 8 9 10; do
-                            if curl -f --max-time 5 "http://localhost:${TEST_PORT}/" > /dev/null 2>&1; then
+                            if curl -f --max-time 5 "http://${TEST_CONTAINER}/" > /dev/null 2>&1; then
                                 echo "✅ Website is accessible on attempt $i!"
                                 SUCCESS=true
                                 break
@@ -300,13 +299,15 @@ pipeline {
                             echo "❌ Website test failed after 10 attempts"
                             echo "📋 Container logs:"
                             docker logs ${TEST_CONTAINER}
+                            echo "📋 Container inspect:"
+                            docker inspect ${TEST_CONTAINER} --format='{{.NetworkSettings.IPAddress}}'
                             docker stop ${TEST_CONTAINER} || true
                             docker rm ${TEST_CONTAINER} || true
                             exit 1
                         fi
                         
                         # Check response content
-                        RESPONSE=$(curl -s "http://localhost:${TEST_PORT}/")
+                        RESPONSE=$(curl -s "http://${TEST_CONTAINER}/")
                         echo "📄 Response preview:"
                         echo "${RESPONSE}" | head -3
                         
@@ -372,8 +373,13 @@ pipeline {
                         # Wait for service to be fully ready
                         SUCCESS=false
                         for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-                            if curl -f --max-time 5 "http://localhost:${DEPLOY_PORT}/" > /dev/null 2>&1; then
-                                echo "✅ Health check passed on attempt $i"
+                            # Try container name first, then localhost as fallback
+                            if curl -f --max-time 5 "http://${CONTAINER_NAME}/" > /dev/null 2>&1; then
+                                echo "✅ Health check passed on attempt $i (using container name)"
+                                SUCCESS=true
+                                break
+                            elif curl -f --max-time 5 "http://host.docker.internal:${DEPLOY_PORT}/" > /dev/null 2>&1; then
+                                echo "✅ Health check passed on attempt $i (using host.docker.internal)"
                                 SUCCESS=true
                                 break
                             else
@@ -386,19 +392,25 @@ pipeline {
                             echo "❌ Health check failed after 15 attempts"
                             echo "📋 Container logs:"
                             docker logs ${CONTAINER_NAME} --tail 20
+                            echo "📋 Container network info:"
+                            docker inspect ${CONTAINER_NAME} --format='{{.NetworkSettings.IPAddress}}'
                             exit 1
                         fi
                         
-                        # Test website response
+                        # Test website response using container name
                         echo "📄 Website response test:"
-                        RESPONSE=$(curl -s "http://localhost:${DEPLOY_PORT}/")
-                        if echo "${RESPONSE}" | grep -q "html\\|HTML"; then
-                            echo "✅ Valid HTML response detected"
+                        if RESPONSE=$(curl -s "http://${CONTAINER_NAME}/"); then
+                            if echo "${RESPONSE}" | grep -q "html\\|HTML"; then
+                                echo "✅ Valid HTML response detected"
+                            else
+                                echo "⚠️  Response may not be valid HTML"
+                            fi
                         else
-                            echo "⚠️  Response may not be valid HTML"
+                            echo "⚠️  Could not fetch response for testing"
                         fi
                         
-                        echo "🌐 Website is accessible at: http://localhost:${DEPLOY_PORT}"
+                        echo "🌐 Website should be accessible at: http://localhost:${DEPLOY_PORT}"
+                        echo "🔗 (Container network name: ${CONTAINER_NAME})"
                     '''
                 }
             }
