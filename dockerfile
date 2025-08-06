@@ -18,18 +18,7 @@ COPY . .
 
 # Generate static site
 RUN echo "Running Python static site generator..." && \
-    if [ -f generate.py ]; then \
-        echo "Running generate.py..." && python generate.py; \
-    elif [ -f main.py ]; then \
-        echo "Running main.py..." && python main.py; \
-    elif [ -f app.py ]; then \
-        echo "Running app.py..." && python app.py; \
-    elif [ -f build.py ]; then \
-        echo "Running build.py..." && python build.py; \
-    else \
-        echo "No generator script found. Available Python files:"; \
-        ls -la *.py 2>/dev/null || echo "No Python files found"; \
-    fi && \
+    ./build.sh \
     echo "Generation complete. Contents:" && ls -la
 
 # Production stage with nginx
