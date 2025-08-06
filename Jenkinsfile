@@ -116,11 +116,13 @@ pipeline {
         
         stage('Validate Python Code') {
             when {
-                anyOf {
-                    expression { params.ACTION == 'deploy' }
-                    expression { params.ACTION == 'restart' }
+                allOf {
+                    anyOf {
+                        expression { params.ACTION == 'deploy' }
+                        expression { params.ACTION == 'restart' }
+                    }
+                    expression { !params.SKIP_TESTS }
                 }
-                not { params.SKIP_TESTS }
             }
             steps {
                 script {
@@ -208,11 +210,13 @@ pipeline {
         
         stage('Test Docker Image') {
             when {
-                anyOf {
-                    expression { params.ACTION == 'deploy' }
-                    expression { params.ACTION == 'restart' }
+                allOf {
+                    anyOf {
+                        expression { params.ACTION == 'deploy' }
+                        expression { params.ACTION == 'restart' }
+                    }
+                    expression { !params.SKIP_TESTS }
                 }
-                not { params.SKIP_TESTS }
             }
             steps {
                 script {
