@@ -163,10 +163,25 @@ pipeline {
                     sh '''
                         echo "🐍 Validating Python code..."
                         
+                        # Check if Python is available
+                        if command -v python3 >/dev/null 2>&1; then
+                            PYTHON_CMD="python3"
+                        elif command -v python >/dev/null 2>&1; then
+                            PYTHON_CMD="python"
+                        else
+                            echo "❌ Python is not installed"
+                            echo "💡 Installing Python3..."
+                            apt-get update && apt-get install -y python3 python3-pip
+                            PYTHON_CMD="python3"
+                        fi
+                        
+                        echo "✅ Using Python: $PYTHON_CMD"
+                        $PYTHON_CMD --version
+                        
                         # Find all Python files and check syntax
                         find . -name "*.py" -type f | while read -r file; do
                             echo "Checking syntax: $file"
-                            python3 -m py_compile "$file" || exit 1
+                            $PYTHON_CMD -m py_compile "$file" || exit 1
                         done
                         
                         echo "✅ Python syntax validation passed"
@@ -269,19 +284,26 @@ pipeline {
                         echo "🔍 Testing on port: ${TEST_PORT}"
                         
                         # Test if the site is accessible
-                        for i in {1..10}; do
+                        SUCCESS=false
+                        for i in 1 2 3 4 5 6 7 8 9 10; do
                             if curl -f --max-time 5 "http://localhost:${TEST_PORT}/" > /dev/null 2>&1; then
-                                echo "✅ Website is accessible!"
+                                echo "✅ Website is accessible on attempt $i!"
+                                SUCCESS=true
                                 break
-                            elif [ $i -eq 10 ]; then
-                                echo "❌ Website test failed after 10 attempts"
-                                docker logs ${TEST_CONTAINER}
-                                exit 1
                             else
                                 echo "⏳ Attempt $i/10 failed, retrying..."
                                 sleep 2
                             fi
                         done
+                        
+                        if [ "$SUCCESS" = "false" ]; then
+                            echo "❌ Website test failed after 10 attempts"
+                            echo "📋 Container logs:"
+                            docker logs ${TEST_CONTAINER}
+                            docker stop ${TEST_CONTAINER} || true
+                            docker rm ${TEST_CONTAINER} || true
+                            exit 1
+                        fi
                         
                         # Check response content
                         RESPONSE=$(curl -s "http://localhost:${TEST_PORT}/")
@@ -348,20 +370,24 @@ pipeline {
                         echo "🏥 Performing health check..."
                         
                         # Wait for service to be fully ready
-                        for i in {1..15}; do
+                        SUCCESS=false
+                        for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
                             if curl -f --max-time 5 "http://localhost:${DEPLOY_PORT}/" > /dev/null 2>&1; then
                                 echo "✅ Health check passed on attempt $i"
+                                SUCCESS=true
                                 break
-                            elif [ $i -eq 15 ]; then
-                                echo "❌ Health check failed after 15 attempts"
-                                echo "📋 Container logs:"
-                                docker logs ${CONTAINER_NAME} --tail 20
-                                exit 1
                             else
                                 echo "⏳ Health check attempt $i/15 failed, retrying..."
                                 sleep 2
                             fi
                         done
+                        
+                        if [ "$SUCCESS" = "false" ]; then
+                            echo "❌ Health check failed after 15 attempts"
+                            echo "📋 Container logs:"
+                            docker logs ${CONTAINER_NAME} --tail 20
+                            exit 1
+                        fi
                         
                         # Test website response
                         echo "📄 Website response test:"
