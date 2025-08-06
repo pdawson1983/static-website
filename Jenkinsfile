@@ -215,8 +215,8 @@ pipeline {
                         CONTAINER_ID = `docker ps -q -f name=${CONTAINER_NAME}`
                         if docker ps -q -f name=${CONTAINER_NAME}; then
                             echo "📦 Found running container: ${CONTAINER_NAME}"
-                            docker stop ${CONTAINER_ID} || true
-                            docker rm ${CONTAINER_ID} || true
+                            docker stop $CONTAINER_ID || true
+                            docker rm $CONTAINER_ID || true
                             echo "✅ Container ${CONTAINER_NAME} stopped and removed"
                         else
                             echo "ℹ️  No running container found with name: ${CONTAINER_NAME}"
