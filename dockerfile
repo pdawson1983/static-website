@@ -19,6 +19,7 @@ COPY . .
 # Generate static site
 RUN echo "Running Python static site generator..." && \
     ls -la && \
+    chmod +x build.sh &&\
     ./build.sh && \
     echo "Generation complete. Contents:" && ls -la
 
