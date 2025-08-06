@@ -36,8 +36,8 @@ pipeline {
         IMAGE_TAG = "${IMAGE_NAME}:${params.ENVIRONMENT}-${BUILD_NUMBER}"
         IMAGE_LATEST = "${IMAGE_NAME}:${params.ENVIRONMENT}-latest"
         
-        // Network for container communication
-        DOCKER_NETWORK = "jenkins-network"
+        // Network for container communication (use default bridge network)
+        DOCKER_NETWORK = "bridge"
         
         // Deployment settings
         DEPLOY_PORT = "${params.PORT}"
@@ -121,14 +121,10 @@ pipeline {
                         echo "Server version: $(docker info --format '{{.ServerVersion}}')"
                     '''
                     
-                    // Create Docker network if it doesn't exist
+                    // Don't try to create default bridge network - it already exists
                     sh '''
-                        if ! docker network ls | grep -q "${DOCKER_NETWORK}"; then
-                            echo "📡 Creating Docker network: ${DOCKER_NETWORK}"
-                            docker network create ${DOCKER_NETWORK} || echo "Network may already exist"
-                        else
-                            echo "✅ Docker network ${DOCKER_NETWORK} already exists"
-                        fi
+                        echo "✅ Using default Docker bridge network"
+                        docker network ls | grep bridge || echo "Bridge network info not available"
                     '''
                     
                     // Check if port is available (if deploying)
@@ -271,9 +267,9 @@ pipeline {
                     sh '''
                         echo "🧪 Testing Docker image..."
                         
-                        # Start container in test mode with same network as Jenkins
+                        # Start container in test mode on default network
                         TEST_CONTAINER="${CONTAINER_NAME}-test"
-                        docker run -d --name ${TEST_CONTAINER} --network ${DOCKER_NETWORK} ${IMAGE_TAG}
+                        docker run -d --name ${TEST_CONTAINER} ${IMAGE_TAG}
                         
                         # Wait for container to be ready
                         echo "⏳ Waiting for container to start..."
@@ -333,10 +329,9 @@ pipeline {
                     sh '''
                         echo "🚀 Deploying container..."
                         
-                        # Run the new container
+                        # Run the new container on default network
                         docker run -d \\
                             --name ${CONTAINER_NAME} \\
-                            --network ${DOCKER_NETWORK} \\
                             --restart unless-stopped \\
                             -p ${DEPLOY_PORT}:80 \\
                             -l "app=static-website" \\
