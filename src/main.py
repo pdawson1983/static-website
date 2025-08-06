@@ -84,7 +84,7 @@ def generate_pages_recursive(content_dir, template_path, dest_dir, basepath):
 
 def main():
     setup_public_directory('static','public', True)
-    generate_pages_recursive('content', 'template.html', 'docs', basepath)
+    generate_pages_recursive('content', 'template.html', 'public', basepath)
 
 if __name__ == '__main__':
     args = sys.argv
