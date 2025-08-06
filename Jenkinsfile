@@ -212,7 +212,7 @@ pipeline {
                 script {
                     sh '''
                         echo "🛑 Stopping existing container if running..."
-                        CONTAINER_ID = `docker ps -q -f name=${CONTAINER_NAME}`
+                        CONTAINER_ID=`docker ps -q -f name=${CONTAINER_NAME}`
                         if docker ps -q -f name=${CONTAINER_NAME}; then
                             echo "📦 Found running container: ${CONTAINER_NAME}"
                             docker stop $CONTAINER_ID || true
